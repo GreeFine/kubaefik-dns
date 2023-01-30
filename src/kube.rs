@@ -26,15 +26,23 @@ pub async fn get_ingress_names() -> Vec<String> {
         .await
         .expect("ingresses in the cluster");
 
-    // TODO: Filter ingress to include only the one using traefik
     ingresses
         .into_iter()
         .filter_map(|ingress| {
-            ingress.spec.and_then(|spec| {
-                spec.rules
-                    .map(|rules| rules.into_iter().map(|rules| rules.host))
+            ingress.metadata.annotations.and_then(|anotations| {
+                (Some("traefik")
+                    == anotations
+                        .get("kubernetes.io/ingress.class")
+                        .map(|a| a.as_str()))
+                .then(|| {
+                    ingress.spec.and_then(|spec| {
+                        spec.rules
+                            .map(|rules| rules.into_iter().map(|rules| rules.host))
+                    })
+                })
             })
         })
+        .flatten()
         .flatten()
         .flatten()
         .collect()
