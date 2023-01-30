@@ -33,6 +33,8 @@ async fn main() -> Result<()> {
         return Ok(());
     }
 
+    info!("DNS server listening on:");
+
     let handler = Handler::from_options(&options).await;
 
     // create DNS server
@@ -41,11 +43,13 @@ async fn main() -> Result<()> {
     // register UDP listeners
     for udp in &options.udp {
         server.register_socket(UdpSocket::bind(udp).await?);
+        info!("UDP: {udp}");
     }
 
     // register TCP listeners
     for tcp in &options.tcp {
         server.register_listener(TcpListener::bind(&tcp).await?, TCP_TIMEOUT);
+        info!("TCP: {tcp}");
     }
 
     // run DNS server

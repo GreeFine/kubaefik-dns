@@ -48,7 +48,7 @@ impl Handler {
         }
         let builder = MessageResponseBuilder::from_message_request(request);
         let mut header = Header::response_from_request(request.header());
-        header.set_authoritative(true);
+        header.set_authoritative(false);
         let response = builder.build(header, records.iter(), &[], &[], &[]);
         responder
             .send_response(response)
