@@ -1,3 +1,5 @@
+#![warn(unused_extern_crates)]
+
 use anyhow::Result;
 use clap::Parser;
 use error::Error;
@@ -8,6 +10,7 @@ use std::{env, time::Duration};
 use tokio::net::{TcpListener, UdpSocket};
 use trust_dns_server::ServerFuture;
 
+mod client;
 mod error;
 mod handler;
 mod kube;
@@ -24,18 +27,24 @@ async fn main() -> Result<()> {
     pretty_env_logger::init();
 
     let options = Options::parse();
+    let (client, client_dev) = kube::clients().await;
 
     if let Some(test) = options.test_mode {
         match test {
-            TestOption::GetIngressNames => info!("{:#?}", kube::get_ingress_names().await),
-            TestOption::GetTraefik => info!("{}", kube::get_traefik_addr().await),
+            TestOption::GetTraefik => {
+                let prod_svc_name = env::var("traefik-svc-name");
+                let prod_svc_name = prod_svc_name.as_deref().unwrap_or("traefik");
+                info!("{}", kube::get_traefik_addr(client, prod_svc_name).await)
+            }
+            TestOption::GetIngressNames => info!("{:#?}", kube::get_ingress_names(client).await),
         };
         return Ok(());
     }
+    client::connect().await;
 
     info!("DNS server listening on:");
 
-    let handler = Handler::from_options(&options).await;
+    let handler = Handler::from_options(&options, client, client_dev).await;
 
     // create DNS server
     let mut server = ServerFuture::new(handler);
