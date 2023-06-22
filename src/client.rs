@@ -8,8 +8,19 @@ use trust_dns_resolver::TokioAsyncResolver;
 static RESOLVER: Lazy<Mutex<Option<TokioAsyncResolver>>> = Lazy::new(|| Mutex::new(None));
 
 pub async fn connect() {
-    let resolver = TokioAsyncResolver::tokio(ResolverConfig::default(), ResolverOpts::default())
-        .expect("failed to connect resolver");
+    let resolver = TokioAsyncResolver::tokio(
+        ResolverConfig::from_parts(
+            None,
+            vec![],
+            NameServerConfigGroup::from_ips_clear(
+                &[IpAddr::V4(Ipv4Addr::new(194, 250, 191, 230))],
+                53,
+                true,
+            ),
+        ),
+        ResolverOpts::default(),
+    )
+    .expect("failed to connect resolver");
 
     let mut resolver_static = RESOLVER.lock().await;
     *resolver_static = Some(resolver);

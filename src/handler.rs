@@ -39,7 +39,7 @@ impl Handler {
         let prod_svc_name = env::var("traefik-svc-name");
         let prod_svc_name = prod_svc_name.as_deref().unwrap_or("traefik");
         let dev_svc_name = env::var("traefik-svc-name-dev");
-        let dev_svc_name = dev_svc_name.as_deref().unwrap_or("neg-traefik");
+        let dev_svc_name = dev_svc_name.as_deref().unwrap_or("traefik");
 
         for (client, svc_name) in [(client_prod, prod_svc_name), (client_dev, dev_svc_name)] {
             let tf_address = kube::get_traefik_addr(client.clone(), svc_name).await;
