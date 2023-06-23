@@ -15,6 +15,6 @@ RUN cargo build --release
 FROM debian:stable-slim AS runtime
 WORKDIR /app
 
-RUN apt update && apt install -y ca-certificates libssl1.1 && rm -rf /var/lib/apt/lists/* 
+RUN apt update && apt install -y ca-certificates libssl3 && rm -rf /var/lib/apt/lists/* 
 COPY --from=builder /app/target/release/kubaefik-dns /app/kubaefik-dns
 ENTRYPOINT ["/app/kubaefik-dns"]
