@@ -6,18 +6,18 @@ use error::Error;
 use handler::Handler;
 use log::info;
 use options::{Options, TestOption};
-use std::{env, time::Duration};
+use std::env;
 use tokio::net::{TcpListener, UdpSocket};
 use trust_dns_server::ServerFuture;
 
+use crate::config::TCP_TIMEOUT;
+
 mod client;
+mod config;
 mod error;
 mod handler;
 mod kube;
 mod options;
-
-/// Timeout for TCP connections.
-const TCP_TIMEOUT: Duration = Duration::from_secs(10);
 
 #[tokio::main]
 async fn main() -> Result<()> {

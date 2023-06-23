@@ -1,11 +1,9 @@
-use once_cell::sync::Lazy;
 use std::net::*;
-use tokio::sync::Mutex;
 use trust_dns_resolver::config::*;
 use trust_dns_resolver::error::ResolveError;
 use trust_dns_resolver::TokioAsyncResolver;
 
-static RESOLVER: Lazy<Mutex<Option<TokioAsyncResolver>>> = Lazy::new(|| Mutex::new(None));
+use crate::config::RESOLVER;
 
 pub async fn connect() {
     let resolver = TokioAsyncResolver::tokio(

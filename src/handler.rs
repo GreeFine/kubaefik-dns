@@ -1,12 +1,12 @@
 use std::{
     collections::HashMap,
-    env,
     net::{IpAddr, Ipv4Addr},
-    str::FromStr,
 };
 
 use ::kube::Client;
+use chrono::{Duration, NaiveDateTime, Utc};
 use log::{error, info};
+use tokio::sync::RwLock;
 use trust_dns_resolver::Name;
 use trust_dns_server::{
     authority::MessageResponseBuilder,
@@ -18,12 +18,14 @@ use trust_dns_server::{
     server::{Request, RequestHandler, ResponseHandler, ResponseInfo},
 };
 
-use crate::{client, kube, Error, Options};
+use crate::{client, config::STATE_REFRESH_MINUTES, kube, Error, Options};
 
 /// DNS Request Handler
-#[derive(Clone, Debug)]
 pub struct Handler {
-    ingresses: HashMap<String, Ipv4Addr>,
+    ingresses: RwLock<HashMap<String, Ipv4Addr>>,
+    kube_client_prod: Client,
+    kube_client_dev: Client,
+    updated_at: NaiveDateTime,
 }
 
 fn record_from_ip(name: Name, ip: &Ipv4Addr) -> Record {
@@ -34,25 +36,28 @@ fn record_from_ip(name: Name, ip: &Ipv4Addr) -> Record {
 impl Handler {
     /// Create new handler from command-line options.
     pub async fn from_options(_options: &Options, client_prod: Client, client_dev: Client) -> Self {
-        let mut ingresses = HashMap::new();
+        let ingresses =
+            RwLock::new(kube::get_ingresses(client_prod.clone(), client_dev.clone()).await);
 
-        let prod_svc_name = env::var("traefik-svc-name");
-        let prod_svc_name = prod_svc_name.as_deref().unwrap_or("traefik");
-        let dev_svc_name = env::var("traefik-svc-name-dev");
-        let dev_svc_name = dev_svc_name.as_deref().unwrap_or("traefik");
-
-        for (client, svc_name) in [(client_prod, prod_svc_name), (client_dev, dev_svc_name)] {
-            let tf_address = kube::get_traefik_addr(client.clone(), svc_name).await;
-
-            let tf_address_ip = Ipv4Addr::from_str(&tf_address).expect("parsed tf ip address");
-            let ingress_names = kube::get_ingress_names(client).await;
-            for mut ingress_name in ingress_names {
-                // adding the trailing dot from the DNS spec
-                ingress_name.push('.');
-                ingresses.insert(ingress_name, tf_address_ip);
-            }
+        Handler {
+            ingresses,
+            kube_client_prod: client_prod,
+            kube_client_dev: client_dev,
+            updated_at: Utc::now().naive_utc(),
         }
-        Handler { ingresses }
+    }
+
+    async fn refresh_state(&self) {
+        if self
+            .updated_at
+            .signed_duration_since(Utc::now().naive_utc())
+            > Duration::minutes(STATE_REFRESH_MINUTES)
+        {
+            let mut ingress = self.ingresses.write().await;
+            *ingress =
+                kube::get_ingresses(self.kube_client_prod.clone(), self.kube_client_dev.clone())
+                    .await;
+        }
     }
 
     async fn handle_query<R: ResponseHandler>(
@@ -60,11 +65,18 @@ impl Handler {
         request: &Request,
         mut responder: R,
     ) -> ResponseInfo {
+        self.refresh_state().await;
+
         let name = request.query().name().to_string();
         info!("query for: {name}");
         let mut records = Vec::new();
-        if let Some(address) = self.ingresses.get(&name) {
-            let record = record_from_ip(request.query().name().into(), address);
+        let local_record = {
+            let ingresses_r = self.ingresses.read().await;
+            ingresses_r
+                .get(&name)
+                .map(|addr| record_from_ip(request.query().name().into(), addr))
+        };
+        if let Some(record) = local_record {
             records.push(record);
         } else {
             error!("name: {name} not found in ingresses");
