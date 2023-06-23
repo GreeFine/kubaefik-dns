@@ -20,12 +20,16 @@ use trust_dns_server::{
 
 use crate::{client, config::STATE_REFRESH_MINUTES, kube, Error, Options};
 
-/// DNS Request Handler
-pub struct Handler {
-    ingresses: RwLock<HashMap<String, Ipv4Addr>>,
+struct State {
+    ingresses: HashMap<String, Ipv4Addr>,
     kube_client_prod: Client,
     kube_client_dev: Client,
-    updated_at: NaiveDateTime,
+    age: NaiveDateTime,
+}
+
+/// DNS Request Handler
+pub struct Handler {
+    state: RwLock<State>,
 }
 
 fn record_from_ip(name: Name, ip: &Ipv4Addr) -> Record {
@@ -33,30 +37,43 @@ fn record_from_ip(name: Name, ip: &Ipv4Addr) -> Record {
     Record::from_rdata(name, 60, rdata)
 }
 
+impl State {
+    async fn refresh(&mut self) {
+        self.ingresses =
+            kube::get_ingresses(self.kube_client_prod.clone(), self.kube_client_dev.clone()).await;
+        self.age = Utc::now().naive_utc();
+    }
+}
+
 impl Handler {
     /// Create new handler from command-line options.
     pub async fn from_options(_options: &Options, client_prod: Client, client_dev: Client) -> Self {
-        let ingresses =
-            RwLock::new(kube::get_ingresses(client_prod.clone(), client_dev.clone()).await);
+        let ingresses = kube::get_ingresses(client_prod.clone(), client_dev.clone()).await;
 
         Handler {
-            ingresses,
-            kube_client_prod: client_prod,
-            kube_client_dev: client_dev,
-            updated_at: Utc::now().naive_utc(),
+            state: State {
+                ingresses,
+                kube_client_prod: client_prod,
+                kube_client_dev: client_dev,
+                age: Utc::now().naive_utc(),
+            }
+            .into(),
         }
     }
 
     async fn refresh_state(&self) {
-        if self
-            .updated_at
-            .signed_duration_since(Utc::now().naive_utc())
-            > Duration::minutes(STATE_REFRESH_MINUTES)
-        {
-            let mut ingress = self.ingresses.write().await;
-            *ingress =
-                kube::get_ingresses(self.kube_client_prod.clone(), self.kube_client_dev.clone())
-                    .await;
+        let outdated = {
+            let state = self.state.read().await;
+            let since_last_refresh = Utc::now().naive_utc().signed_duration_since(state.age);
+            info!(
+                "State age: {}, since now: {}",
+                state.age, since_last_refresh
+            );
+            since_last_refresh > Duration::minutes(STATE_REFRESH_MINUTES)
+        };
+        if outdated {
+            let mut state = self.state.write().await;
+            state.refresh().await;
         }
     }
 
@@ -71,8 +88,9 @@ impl Handler {
         info!("query for: {name}");
         let mut records = Vec::new();
         let local_record = {
-            let ingresses_r = self.ingresses.read().await;
-            ingresses_r
+            let state_r = self.state.read().await;
+            state_r
+                .ingresses
                 .get(&name)
                 .map(|addr| record_from_ip(request.query().name().into(), addr))
         };

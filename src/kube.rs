@@ -2,6 +2,7 @@ use std::{collections::HashMap, env, net::Ipv4Addr, str::FromStr};
 
 use k8s_openapi::api::{core::v1::Service, networking::v1::Ingress};
 use kube::{api::ListParams, Api, Client};
+use log::info;
 
 pub async fn clients() -> (Client, Client) {
     let client_dev = Client::try_default().await.expect("kube client");
@@ -32,6 +33,7 @@ pub async fn get_ingresses(client_prod: Client, client_dev: Client) -> HashMap<S
             ingresses.insert(ingress_name, tf_address_ip);
         }
     }
+    info!("Retreived ingresses: {ingresses:#?}");
     ingresses
 }
 

@@ -9,4 +9,7 @@ pub const TCP_TIMEOUT: Duration = Duration::from_secs(10);
 
 pub static RESOLVER: Lazy<Mutex<Option<TokioAsyncResolver>>> = Lazy::new(|| Mutex::new(None));
 
+#[cfg(debug_assertions)]
+pub const STATE_REFRESH_MINUTES: i64 = 1;
+#[cfg(not(debug_assertions))]
 pub const STATE_REFRESH_MINUTES: i64 = 5;
