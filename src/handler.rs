@@ -22,6 +22,7 @@ use crate::{client, config::STATE_REFRESH_MINUTES, kube, Error, Options};
 
 struct State {
     ingresses: HashMap<String, Ipv4Addr>,
+    services: HashMap<String, Ipv4Addr>,
     kube_client_prod: Client,
     kube_client_dev: Client,
     age: NaiveDateTime,
@@ -39,8 +40,13 @@ fn record_from_ip(name: Name, ip: &Ipv4Addr) -> Record {
 
 impl State {
     async fn refresh(&mut self) {
-        self.ingresses =
-            kube::get_ingresses(self.kube_client_prod.clone(), self.kube_client_dev.clone()).await;
+        self.ingresses = kube::get_traefik_ingresses(
+            self.kube_client_prod.clone(),
+            self.kube_client_dev.clone(),
+        )
+        .await;
+        self.services =
+            kube::get_services(self.kube_client_prod.clone(), self.kube_client_dev.clone()).await;
         self.age = Utc::now().naive_utc();
     }
 }
@@ -48,11 +54,13 @@ impl State {
 impl Handler {
     /// Create new handler from command-line options.
     pub async fn from_options(_options: &Options, client_prod: Client, client_dev: Client) -> Self {
-        let ingresses = kube::get_ingresses(client_prod.clone(), client_dev.clone()).await;
+        let ingresses = kube::get_traefik_ingresses(client_prod.clone(), client_dev.clone()).await;
+        let services = kube::get_services(client_prod.clone(), client_dev.clone()).await;
 
         Handler {
             state: State {
                 ingresses,
+                services,
                 kube_client_prod: client_prod,
                 kube_client_dev: client_dev,
                 age: Utc::now().naive_utc(),
@@ -93,11 +101,18 @@ impl Handler {
                 .ingresses
                 .get(&name)
                 .map(|addr| record_from_ip(request.query().name().into(), addr))
+                // If we didn't find the name in ingresses, try services
+                .or_else(|| {
+                    state_r
+                        .services
+                        .get(&name)
+                        .map(|addr| record_from_ip(request.query().name().into(), addr))
+                })
         };
         if let Some(record) = local_record {
             records.push(record);
         } else {
-            error!("name: {name} not found in ingresses");
+            error!("name: {name} not found in ingresses or services");
             let result = client::query(&name).await.expect("address query result");
             records.append(
                 &mut result

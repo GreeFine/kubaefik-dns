@@ -15,7 +15,10 @@ pub async fn clients() -> (Client, Client) {
 }
 
 /// Using [get_ingress_names] and [get_traefik_addr] make a map of URLs -> Ip address for the DNS to serve
-pub async fn get_ingresses(client_prod: Client, client_dev: Client) -> HashMap<String, Ipv4Addr> {
+pub async fn get_traefik_ingresses(
+    client_prod: Client,
+    client_dev: Client,
+) -> HashMap<String, Ipv4Addr> {
     let prod_svc_name = env::var("traefik-svc-name");
     let prod_svc_name = prod_svc_name.as_deref().unwrap_or("traefik");
     let dev_svc_name = env::var("traefik-svc-name-dev");
@@ -35,6 +38,46 @@ pub async fn get_ingresses(client_prod: Client, client_dev: Client) -> HashMap<S
     }
     info!("Retreived ingresses: {ingresses:#?}");
     ingresses
+}
+
+/// Using [get_ingress_names] and [get_traefik_addr] make a map of URLs -> Ip address for the DNS to serve
+pub async fn get_services(_client_prod: Client, client_dev: Client) -> HashMap<String, Ipv4Addr> {
+    // TODO: Do we need to do this for prod?
+    let services: Api<Service> = Api::all(client_dev);
+
+    let params = ListParams::default();
+    let services = services
+        .list(&params)
+        .await
+        .expect("ingresses in the cluster");
+
+    let services = services
+        .into_iter()
+        .filter_map(|service| {
+            service
+                .spec
+                .as_ref()
+                .unwrap()
+                .cluster_ip
+                .as_ref()
+                .and_then(|cluster_ip| {
+                    let ip_parsed = Ipv4Addr::from_str(cluster_ip);
+                    ip_parsed.ok().map(|ip| {
+                        (
+                            format!(
+                                "{}.{}.bf.",
+                                service.metadata.name.unwrap(),
+                                service.metadata.namespace.unwrap()
+                            ),
+                            ip,
+                        )
+                    })
+                })
+        })
+        .collect();
+
+    info!("Retreived services: {services:#?}");
+    services
 }
 
 /// Get the IP address of the traefik in the cluster
