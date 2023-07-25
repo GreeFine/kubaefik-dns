@@ -63,17 +63,28 @@ pub async fn get_services(_client_prod: Client, client_dev: Client) -> HashMap<S
                 .and_then(|cluster_ip| {
                     let ip_parsed = Ipv4Addr::from_str(cluster_ip);
                     ip_parsed.ok().map(|ip| {
-                        (
-                            format!(
-                                "{}.{}.bf.",
-                                service.metadata.name.unwrap(),
-                                service.metadata.namespace.unwrap()
+                        vec![
+                            (
+                                format!(
+                                    "{}.{}.bf.",
+                                    service.metadata.name.clone().unwrap(),
+                                    service.metadata.namespace.clone().unwrap()
+                                ),
+                                ip,
                             ),
-                            ip,
-                        )
+                            (
+                                format!(
+                                    "{}.{}.svc.cluster.local.",
+                                    service.metadata.name.unwrap(),
+                                    service.metadata.namespace.unwrap()
+                                ),
+                                ip,
+                            ),
+                        ]
                     })
                 })
         })
+        .flatten()
         .collect();
 
     info!("Retreived services: {services:#?}");
