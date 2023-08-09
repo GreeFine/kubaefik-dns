@@ -42,7 +42,6 @@ pub async fn get_traefik_ingresses(
 
 /// Using [get_ingress_names] and [get_traefik_addr] make a map of URLs -> Ip address for the DNS to serve
 pub async fn get_services(_client_prod: Client, client_dev: Client) -> HashMap<String, Ipv4Addr> {
-    // TODO: Do we need to do this for prod?
     let services: Api<Service> = Api::all(client_dev);
 
     let params = ListParams::default();
