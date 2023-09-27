@@ -112,17 +112,25 @@ impl Handler {
         if let Some(record) = local_record {
             records.push(record);
         } else {
-            error!("name: {name} not found in ingresses or services");
-            let result = client::query(&name).await.expect("address query result");
-            records.append(
-                &mut result
-                    .into_iter()
-                    .filter_map(|ip| match ip {
-                        IpAddr::V4(ip) => Some(record_from_ip(request.query().name().into(), &ip)),
-                        IpAddr::V6(_) => None,
-                    })
-                    .collect(),
-            );
+            info!("name: {name} not found in ingresses or services");
+            match client::query(&name).await {
+                Ok(result) => {
+                    records.append(
+                        &mut result
+                            .into_iter()
+                            .filter_map(|ip| match ip {
+                                IpAddr::V4(ip) => {
+                                    Some(record_from_ip(request.query().name().into(), &ip))
+                                }
+                                IpAddr::V6(_) => None,
+                            })
+                            .collect(),
+                    );
+                }
+                Err(e) => {
+                    error!("Query for {name} failed\n{e:#?}");
+                }
+            }
         }
         let builder = MessageResponseBuilder::from_message_request(request);
         let mut header = Header::response_from_request(request.header());
