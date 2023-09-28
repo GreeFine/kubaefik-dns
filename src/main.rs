@@ -40,7 +40,6 @@ async fn main() -> Result<()> {
         };
         return Ok(());
     }
-    client::connect().await;
 
     info!("DNS server listening on:");
 
