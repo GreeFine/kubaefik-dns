@@ -10,4 +10,4 @@ pub const STATE_REFRESH_MINUTES: i64 = 5;
 
 /// Address of the server used to query after we fail to find an answer in our map
 pub const DNS_SERVER_TO_QUERY: Ipv4Addr = Ipv4Addr::new(1, 1, 1, 1);
-pub const DNS_SERVER_FAILOVER: Ipv4Addr = Ipv4Addr::new(185, 253, 5, 101);
+pub const DNS_SERVER_FAILOVER: Ipv4Addr = Ipv4Addr::new(145, 239, 186, 86);
